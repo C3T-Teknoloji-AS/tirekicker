@@ -25,3 +25,5 @@ report-*.json
 .firecrawl/
 .playwright-mcp/
 .mcp.json
+deploy/cf-worker/.wrangler/
+node_modules/
