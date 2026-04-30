@@ -41,11 +41,32 @@
 7. `lib/` modülleri
 8. Test cihazı: kullanıcının lokal bir Linux + bir Mac üzerinde dry-run
 
+### 2026-04-30 — Session 002 (test scope kilitleme)
+
+**Bağlam:** İlk hedef cihaz **ASUS Ascent GX10** (NVIDIA GB10 Superchip, ARM aarch64, 128 GB unified memory, NVLink-C2C, ~2K USD). Cihaz değeri yüksek olduğundan tarama maksimum sinyalle yapılacak.
+
+**Alınan kararlar:**
+
+| # | Konu | Karar | Gerekçe |
+|---|---|---|---|
+| 13 | Sudo politikası | **%100 zorunlu** | 2K USD cihaz; SMART / dmidecode / serial / dmesg için tam veri lazım. Script başında `sudo -v` ile parola bir kez alınır, cache. CLAUDE.md "Tasarım Kuralları" madde 1 revize edildi. |
+| 14 | Toplam test süresi | **~60 sn hedef** | Önceki "60–180 sn" üst sınırı 60'a çekildi. |
+| 15 | OS kapsamı v0 | **Linux + Windows zorunlu** (run.sh + run.ps1 paralel). macOS v2'ye | Önceki "best effort" macOS v0 kapsamından çıkarıldı. |
+| 16 | nvidia-smi yoksa | Devam + flag | Anomali raporlanır, diğer adımlar koşmaya devam eder. |
+| 17 | JSON'da raw nvidia-smi -q vb. | **Dahil** | n8n parse zorlansa bile ham veri katma değer; başka ülkede de test edileceği için ileri yarar. |
+| 18 | Spec doğrulaması | **n8n tarafında** | Script cihaz-agnostik kalsın; profile'lar n8n'de. Yarın Jetson eklerken script'e dokunmayacağız. |
+| 19 | Final test scope | 11 adım (0–10) | Self-check, OS+arch, System (sudo dmidecode), Freshness, GPU+stack, AI smoke, Storage bench, NVMe SMART (sudo), Network, Thermal/Power (yüklü), Fingerprint + POST. |
+| 20 | Thermal okuma zamanı | **Yük sonrası** | AI smoke + storage bench'ten sonra ~2 sn bekle, GPU/CPU temp + throttle reasons oku. Yüklü thermal yakalanır. |
+| 21 | Speedtest | **Çıkarıldı** | Satıcı evi internet hızı bizi yanıltır; sadece link speed / duplex + public IP + up flag yeterli. |
+| 22 | JSON şeması v0.1 | **Onaylı** | Ham bloklar düz string (gzip değil); fingerprint çift = 12-char + 64-char; `schema_version` 0.1; her modül parsed + raw; tüm hatalar tek `errors[]` listesinde. `lib/report.sh` referans alacak. |
+| 23 | Delivery failover | **3 katman + ekran** | (1) n8n → (2) CF Worker (Telegram bot proxy) → (3) file upload (0x0.st → catbox → transfer.sh) + URL'yi Worker'a relay → (4) son çare: ekrana URL + JSON path. POST'un başarısız olması yasak. |
+| 24 | Worker birleştirme önerisi | **Beklemede (Adım 3+4 birleşik)** | `tk.c3t.com.tr` üstünde tek CF Worker — `GET /` (run.sh redirect), `GET /win` (run.ps1), `POST /api/report`, `POST /api/relay-url`. Adım 3 ve 4'ü tek karara çevirir. Kullanıcı onayı bekleniyor. |
+
 ## Açık Sorular
 
-- Webhook URL'i build-time embed mi, runtime env mi? (Public repo + embed = URL ifşa olur. Ama URL kendisi secret değil; n8n tarafında basic-auth veya signed payload ile koruyabiliriz.)
-- Sudo gereken adımlar (örn. `dmidecode` serial number için) opsiyonel mi yapılacak yoksa hiç istenmesin mi?
-- GPU yoksa (CPU-only AI cihaz) AI smoke test ne yapsın? (Skip + raporla mı, CPU matmul mu)
+- **Worker birleştirme** (Adım 3+4): tek Worker multi-path mi, ayrı subdomain mi?
+- **Sırlar:** n8n URL + Telegram bot_token + chat_id'i kullanıcıdan ne zaman alacağız (şimdi mi, Adım 5 remote bağlamayla mı)?
+- **CF account izni:** `tk.c3t.com.tr` Worker route ekleme zamanı (kullanıcı "hazır" diyince).
 
 ## Pattern Notları
 
