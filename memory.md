@@ -69,11 +69,14 @@
 | 30 | Worker rate-limit | IP başına **100 / dk** | 4 cihaz aynı anda test ederse rahat geçsin. |
 | 31 | Repo + push | **Tamam** | `https://github.com/C3T-Teknoloji-AS/tirekicker` public, 4 commit, main upstream. |
 | 32 | lib/ klasörü | **v0'da yok** | `run.sh` tek dosya, fonksiyonlar inline. `curl | bash` için en pürüzsüz. lib/ + build sistemi v1'e. |
+| 33 | n8n iptal | **v0'da kapalı** | Kullanıcının n8n setup'ı düzgün çalışmıyor; açmakla uğraşılmıyor. CF Worker `handleReport`'ta n8n forward bloğu yorum satırı; `run.sh`'te Tier 1 (n8n direct) bloğu yorum satırı. Yeni delivery: (1) Worker → Telegram doğrudan, (2) file upload, (3) ekran. n8n eklenmek istenirse: yorum açılır + `N8N_WEBHOOK_URL` secret set edilir. |
+| 34 | run.sh + Worker v0 yazıldı | **Tamam** | `run.sh` 12 adım tek dosya (~700 satır, fonksiyonlar inline, dry-run destekli). `deploy/cf-worker/index.js` multi-path (UA detect ile `/` curl/browser ayrımı; `/win`, `/run.sh`, `/api/report`, `/api/relay-url`); rate limit 100/dk per IP. `wrangler.toml` + deploy README hazır. |
 
 ## Açık Sorular
 
-- **Sırlar (Adım 5b):** n8n webhook URL + Telegram bot_token + chat_id — Worker deploy öncesi kullanıcıdan alınacak.
+- **Sırlar (Adım 5b):** Telegram bot_token + chat_id — Worker deploy öncesi kullanıcıdan alınacak.
 - **CF Worker route** (Adım 5e): `tk.c3t.com.tr` route ekleme — kullanıcı "deploy hazır" deyince.
+- **Dry-run testi (Adım 5d):** Kullanıcının lokal Linux/Mac'inde `bash run.sh --dry-run` koşturulup ham JSON çıktısı incelenecek; Python/PyTorch yoksa AI smoke fallback'i nasıl davranıyor görülecek.
 
 ## Pattern Notları
 

@@ -1,0 +1,17 @@
+name = "tirekicker-relay"
+main = "index.js"
+compatibility_date = "2025-04-01"
+
+# Custom domain bound via dashboard:
+# Workers & Pages -> tirekicker-relay -> Settings -> Triggers -> Custom Domains
+# Add: tk.c3t.com.tr
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "REPLACE_AT_DEPLOY"
+
+# Secrets (wrangler secret put):
+#   TELEGRAM_BOT_TOKEN     - required
+#   TELEGRAM_CHAT_ID       - required
+#   HMAC_KEY               - optional (placeholder; not enforced in v0)
+#   N8N_WEBHOOK_URL        - optional (n8n forward currently disabled in code)

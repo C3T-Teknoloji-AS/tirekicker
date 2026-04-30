@@ -67,7 +67,7 @@ Satıcı yanındaki kişi
 6. **Self-contained.** Script tek dosya, external dependency'siz. `jq`, `python3`, `nvidia-smi`, `nvme-cli`, `dmidecode`, `lspci` varsa kullan; yoksa fallback / "missing" flag.
 7. **Idempotent.** Aynı cihazda 5 kere çalıştırılırsa 5 tutarlı sonuç vermeli (timestamp ve random `report_id` hariç).
 8. **Cihaz-agnostik.** Script "GX10 expected: ..." gibi profil tutmaz. Ham veri gönderir; beklenti karşılaştırması n8n tarafında yapılır.
-9. **POST asla başarısız olamaz.** 3 katman + ekran fallback'lı delivery zinciri: (1) n8n primary → (2) CF Worker (Telegram bot proxy) → (3) file upload (0x0.st → catbox → transfer.sh) → URL'yi Worker'a relay → (4) son çare: ekrana URL + JSON path. Satıcı yanındaki kişi "manuel gönder" gibi bir iş yapmaz.
+9. **POST asla başarısız olamaz.** 2 katman + ekran fallback'lı delivery zinciri: (1) **CF Worker → Telegram doğrudan** (n8n iptal — düzgün çalışmıyor; kodda yorum satırı olarak duruyor, ileride açılabilir) → (2) file upload (0x0.st → catbox → transfer.sh) → URL'yi Worker `/api/relay-url`'e bildir → (3) son çare: ekrana URL + JSON path. Satıcı yanındaki kişi "manuel gönder" gibi bir iş yapmaz.
 10. **Hardware ID cross-check.** GPU adı (`nvidia-smi`) + PCI Device ID (`lspci -vnn`) + board serial (`dmidecode -t baseboard`) **tutarlı olmak zorunda**. Tutarsızlık → JSON'da `hwid_mismatch: true` flag'i.
 
 ## Test Scope (Sıkılaştırılmış — Session 002)
