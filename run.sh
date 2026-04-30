@@ -13,8 +13,8 @@ TK_VERSION="0.1.2"
 TK_SCHEMA_VERSION="0.1"
 TK_TOTAL_STEPS=12
 
-TK_WORKER_REPORT_URL="${TK_WORKER_REPORT_URL:-https://tirekicker-relay.gentle-heart-33fd.workers.dev/api/report}"
-TK_WORKER_RELAY_URL="${TK_WORKER_RELAY_URL:-https://tirekicker-relay.gentle-heart-33fd.workers.dev/api/relay-url}"
+TK_WORKER_REPORT_URL="${TK_WORKER_REPORT_URL:-https://tk.ikizai.com/api/report}"
+TK_WORKER_RELAY_URL="${TK_WORKER_RELAY_URL:-https://tk.ikizai.com/api/relay-url}"
 TK_N8N_DIRECT_URL="${TK_N8N_DIRECT_URL:-}"
 TK_HMAC_KEY="${TK_HMAC_KEY:-tk_v0_dev_unsafe}"
 
