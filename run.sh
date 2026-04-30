@@ -9,7 +9,7 @@ set -uo pipefail
 # ============================================================================
 # CONFIG
 # ============================================================================
-TK_VERSION="0.1.5"
+TK_VERSION="0.1.6"
 TK_SCHEMA_VERSION="0.1"
 TK_TOTAL_STEPS=12
 
@@ -167,9 +167,9 @@ dd_mbps() {
 # BANNER + SUDO
 # ============================================================================
 clear 2>/dev/null || true
-cat <<'BANNER'
+cat <<BANNER
 ========================================================
-  Tirekicker  v0.1  -  Device Pre-Purchase Check
+  Tirekicker  v${TK_VERSION}  -  Device Pre-Purchase Check
   ~85 seconds. Read-only. Privacy-safe.
 ========================================================
 
@@ -1024,5 +1024,4 @@ fi
 
 echo
 printf "%sDone.%s\n" "$C_BOLD" "$C_RESET"
-echo "Wait at the seller's place until the buyer says 'go ahead, pay' on Telegram."
 echo
