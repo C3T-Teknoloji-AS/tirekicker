@@ -421,7 +421,9 @@ UPTIME_SEC=""
 BOOT_EPOCH=""
 [[ -r /proc/uptime ]] && UPTIME_SEC=$(awk '{print int($1)}' /proc/uptime)
 if [[ -z "$UPTIME_SEC" ]] && [[ "$HAVE_SYSCTL" == "true" ]]; then
-  BOOT_EPOCH=$(sysctl -n kern.boottime 2>/dev/null | grep -oE 'sec = [0-9]+' | awk '{print $3}')
+  # Mac kern.boottime: "{ sec = N, usec = M } ..."
+  # grep matches "sec = X" inside "usec = X" too -- head -1 picks first.
+  BOOT_EPOCH=$(sysctl -n kern.boottime 2>/dev/null | grep -oE 'sec = [0-9]+' | head -1 | awk '{print $3}')
   [[ -n "$BOOT_EPOCH" ]] && UPTIME_SEC=$(( $(date +%s) - BOOT_EPOCH ))
 fi
 
@@ -589,7 +591,7 @@ log_ok
 # ============================================================================
 # STEP 7 + 8 + (THERMAL SNAPSHOT 1): AI smoke + parallel storage bench
 # ============================================================================
-log_step "Running sustained AI smoke (60s)"
+log_step "Running sustained AI smoke + storage bench (60s)"
 
 # Background storage bench at smoke -5s
 (
@@ -754,15 +756,12 @@ JSON_AI=$(printf '{"performed":%s,"backend":%s,"duration_sec":%s,"tests":%s,"pea
   "$(json_num_or_null "$SMOKE_PEAK_GFLOPS")" \
   "$(json_num_or_null "$SMOKE_PEAK_MEM_BYTES")" \
   "$(json_string_or_null "$SMOKE_RAW")")
-log_ok
 
-log_step "Storage benchmark"
+# Storage bench (collected from background) -- merged into AI smoke step
 if [[ -n "$BENCH_RESULT" ]]; then
   JSON_STORAGE="$BENCH_RESULT"
-  log_ok
-else
-  log_skip "no result"
 fi
+log_ok
 
 # ============================================================================
 # STEP 9: NVMe SMART
