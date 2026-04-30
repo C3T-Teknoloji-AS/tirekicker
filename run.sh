@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tirekicker v0.1.1 -- pre-purchase remote check
+# tirekicker -- pre-purchase remote hardware check
 # https://github.com/C3T-Teknoloji-AS/tirekicker
 # Read-only diagnostic. No installation. /tmp writes only.
 # Privacy: SSH keys, browser data, user files are NEVER read.
