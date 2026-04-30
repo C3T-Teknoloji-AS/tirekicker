@@ -60,13 +60,20 @@
 | 21 | Speedtest | **Çıkarıldı** | Satıcı evi internet hızı bizi yanıltır; sadece link speed / duplex + public IP + up flag yeterli. |
 | 22 | JSON şeması v0.1 | **Onaylı** | Ham bloklar düz string (gzip değil); fingerprint çift = 12-char + 64-char; `schema_version` 0.1; her modül parsed + raw; tüm hatalar tek `errors[]` listesinde. `lib/report.sh` referans alacak. |
 | 23 | Delivery failover | **3 katman + ekran** | (1) n8n → (2) CF Worker (Telegram bot proxy) → (3) file upload (0x0.st → catbox → transfer.sh) + URL'yi Worker'a relay → (4) son çare: ekrana URL + JSON path. POST'un başarısız olması yasak. |
-| 24 | Worker birleştirme önerisi | **Beklemede (Adım 3+4 birleşik)** | `tk.c3t.com.tr` üstünde tek CF Worker — `GET /` (run.sh redirect), `GET /win` (run.ps1), `POST /api/report`, `POST /api/relay-url`. Adım 3 ve 4'ü tek karara çevirir. Kullanıcı onayı bekleniyor. |
+| 24 | Worker birleştirme + landing | **Onaylı** | `tk.c3t.com.tr/` HTML landing (EN/ES toggle, 2 buton, clipboard copy); `GET /win` (run.ps1 redirect); `POST /api/report` (n8n forward + Telegram); `POST /api/relay-url` (Tier 3 alarm). |
+| 25 | Risk seviyesi | **Yüksek** | 4 cihaz × 2K = 8K USD borçla, iade yok, TR'de tamir yok, satıcı güvenilmez. Tarama saldırgan olacak. |
+| 26 | Scope sıkılaştırma | **Onaylı (Session 002)** | 11→12 adım, ~60sn → ~85sn. Eklenen: (a) Hardware ID cross-check (NON-NEG madde 10), (b) sustained AI smoke 60s, (c) dmesg / journal hata pattern taraması, (d) retired pages + ECC aggregate, (e) NVLink-C2C + PCIe gen+lane, (f) RAM type+speed (`dmidecode -t memory`), (g) thermal 2 snapshot (yük sırası + yük sonrası), (h) storage bench AI smoke ile paralel. |
+| 27 | 4 cihaz tipi | **Hepsi GX10** | Sustained AI smoke 60s GB10 thermal'i tetiklemek için. |
+| 28 | Photo report | **README zorunlu** | 6 fotoğraf: ön / arka / alt / I-O paneli / adaptör etiketi / seri etiketi. Telegram'a script raporundan ayrı. |
+| 29 | Two-pass UX | **README zorunlu** | "Done" sonrası arkadaş ödeme YAPMAZ; Telegram'dan "go ahead, pay" beklenir. EN + ES açıkça. |
+| 30 | Worker rate-limit | IP başına **100 / dk** | 4 cihaz aynı anda test ederse rahat geçsin. |
+| 31 | Repo + push | **Tamam** | `https://github.com/C3T-Teknoloji-AS/tirekicker` public, 4 commit, main upstream. |
+| 32 | lib/ klasörü | **v0'da yok** | `run.sh` tek dosya, fonksiyonlar inline. `curl | bash` için en pürüzsüz. lib/ + build sistemi v1'e. |
 
 ## Açık Sorular
 
-- **Worker birleştirme** (Adım 3+4): tek Worker multi-path mi, ayrı subdomain mi?
-- **Sırlar:** n8n URL + Telegram bot_token + chat_id'i kullanıcıdan ne zaman alacağız (şimdi mi, Adım 5 remote bağlamayla mı)?
-- **CF account izni:** `tk.c3t.com.tr` Worker route ekleme zamanı (kullanıcı "hazır" diyince).
+- **Sırlar (Adım 5b):** n8n webhook URL + Telegram bot_token + chat_id — Worker deploy öncesi kullanıcıdan alınacak.
+- **CF Worker route** (Adım 5e): `tk.c3t.com.tr` route ekleme — kullanıcı "deploy hazır" deyince.
 
 ## Pattern Notları
 
