@@ -9,7 +9,7 @@ set -uo pipefail
 # ============================================================================
 # CONFIG
 # ============================================================================
-TK_VERSION="0.1.1"
+TK_VERSION="0.1.2"
 TK_SCHEMA_VERSION="0.1"
 TK_TOTAL_STEPS=12
 
@@ -597,7 +597,7 @@ log_step "Running sustained AI smoke + storage bench (60s)"
 (
   sleep 55
   BENCH_FILE="${TK_REPORT_DIR}/tk_bench_$$"
-  BENCH_SIZE_MB=512
+  BENCH_SIZE_MB=2048
   BENCH_START=$(date +%s)
   # Linux dd uses oflag=direct; Mac BSD dd does not support oflag, but accepts simpler flags
   if dd if=/dev/zero of="$BENCH_FILE" bs=1m count=$BENCH_SIZE_MB 2>/dev/null >/dev/null; then
