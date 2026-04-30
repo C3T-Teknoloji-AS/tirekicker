@@ -27,15 +27,17 @@ Satıcı yanındaki kişi
 | GitHub org | `C3T-Teknoloji-AS` (kullanıcı reposu manuel oluşturuyor) |
 | Görünürlük | **Public** (one-liner curl için private = token zorunluluğu, satıcı arkadaşa yük olur) |
 | Sonuç kanalı | **n8n webhook** → Telegram (URL henüz set edilmedi, secret olarak yönetilecek) |
-| Çıktı dili | Script ekran çıktısı **İngilizce** (hedef kullanıcı yabancı). Dokümantasyon Türkçe. |
+| Çıktı dili | Script ekran çıktısı **İngilizce**. README **iki dilli: EN + ES**. İlk hedef ülke İspanya. Dahili docs (CLAUDE.md, memory.md, commit) Türkçe. |
 | OS desteği | Linux (~%90, öncelik), Windows (~%10), macOS (Apple Silicon AI cihazlar için), olası diğer |
+| Hedef süre | **Kullanıcıya 5–10 dk söylenir** (güvenli pay). Script gerçek çalışma süresi 60–180sn hedef. |
+| Kullanıcı talimatı | Çok yalın: cihaz açık, internete bağlı, havalandırması açık, OS'una göre tek satır komut, "Done" yazınca kapat. |
 | Test scope | Henüz kesin değil — yeni session başında konuşulacak. Ön taslak aşağıda. |
 
 ## Tasarım Kuralları (NON-NEGOTIABLE)
 
 1. **Tek satır komut.** Satıcı yanındaki kişi 1 komut yazacak, başka bir şey yazmayacak. `sudo` istenmemeli (ya optional yapılır ya da elden geliyorsa olmadan çalışır).
 2. **Hiçbir kalıcı değişiklik yapılmaz.** Cihaza kurulum, paket indirme, dosya bırakma yok. Tüm araçlar zaten kuruluysa kullan, değilse "missing" raporla.
-3. **Hızlı.** Toplam çalışma 60–120 saniye arası hedef. Satıcı önünde uzun süre tutamayız.
+3. **Hızlı.** Gerçek çalışma 60–180sn hedef. Kullanıcıya 5–10dk söyleniyor (güvenli pay + thermal/AI smoke için yeterli marj).
 4. **Sessiz hata yok.** Bir adım fail olursa progress'te "✗ failed (sebep)" yazılır, script devam eder, JSON'da `null` + `error` field'ı olur.
 5. **Privacy.** SSH key, browser history, kullanıcı dosyaları KESINLIKLE okunmaz. Sadece donanım/sistem fingerprint'i.
 6. **Self-contained.** Script tek dosya, external dependency'siz çalışmalı (jq vb. varsa kullan, yoksa pure bash/awk fallback).
@@ -88,6 +90,7 @@ tirekicker/
 
 ## Çalışma Tarzı
 
-- Bu repo c3t altında ama **kullanıcılar yurtdışındaki satıcılar** — README ve script çıktısı **İngilizce**. Geri kalan her şey (CLAUDE.md, memory.md, commitler) **Türkçe**.
+- Bu repo c3t altında ama **kullanıcılar yurtdışındaki satıcı çevresinde teknik olmayan kişiler**. README **EN + ES iki dilli**, script çıktısı **EN**. İlk hedef ülke **İspanya** — sonradan başka diller eklenebilir (her dil README'de ayrı bölüm). Geri kalan her şey (CLAUDE.md, memory.md, commitler) **Türkçe**.
+- README **çok yalın** olmalı: "cihaz açık + internet + havalandırma → OS'una göre satırı kopyala-yapıştır → Done deyince kapat". Teknik ayrıntı sıfır.
 - Commitler Türkçe, c3t standardı.
 - OpenWolf protokolü geçerli — ana c3t/CLAUDE.md'deki kurallar (proje aramada `projects/` öncelikli, sudo onaysız çalışmaz vb.) hâlâ bağlayıcı.

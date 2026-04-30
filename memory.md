@@ -18,9 +18,12 @@
 | 4 | Görünürlük | Public | Curl one-liner private repoda token zorunlu kılar; satıcı arkadaşa yük |
 | 5 | Sonuç kanalı | n8n webhook → Telegram | n8n zaten ayakta, en az ek altyapı |
 | 6 | Script dili | Bash (Linux/macOS), PowerShell (Windows faz 2) | Bağımlılıksız, default kurulu |
-| 7 | Çıktı dili | İngilizce | Hedef kullanıcı yabancı |
-| 8 | OS önceliği | Linux %90, Windows %10, macOS lazım olabilir | AI cihazların büyük çoğunluğu Linux-based |
-| 9 | Test scope | Taslak: OS detect, system info, GPU detect, network sanity, storage bench, AI smoke, power/thermal — toplam 60-120sn | Yeni session'da kesin onay alınacak |
+| 7 | Script çıktı dili | İngilizce | — |
+| 8 | README dili | **EN + ES iki dilli** (önce EN, sonra ES) | İlk hedef ülke İspanya |
+| 9 | OS önceliği | Linux %90, Windows %10, macOS lazım olabilir | AI cihazların büyük çoğunluğu Linux-based |
+| 10 | Kullanıcıya söylenen süre | 5–10 dakika | Gerçek çalışma 60–180sn ama güvenli pay verildi |
+| 11 | README üslubu | Çok yalın: açık + internet + havalandırma + OS satırını yapıştır | Hedef teknik bilgi sıfır |
+| 12 | Test scope | Taslak: OS detect, system info, GPU detect, network sanity, storage bench, AI smoke, power/thermal | Yeni session'da kesin onay alınacak |
 
 **Yapılan işler:**
 - `projects/tirekicker/` oluşturuldu, `README.md` yazıldı
