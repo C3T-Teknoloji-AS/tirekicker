@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tirekicker v0.1.0 -- pre-purchase remote check
+# tirekicker v0.1.1 -- pre-purchase remote check
 # https://github.com/C3T-Teknoloji-AS/tirekicker
 # Read-only diagnostic. No installation. /tmp writes only.
 # Privacy: SSH keys, browser data, user files are NEVER read.
@@ -7,9 +7,9 @@
 set -uo pipefail
 
 # ============================================================================
-# CONFIG (deploy-time injected via Worker; defaults are dev placeholders)
+# CONFIG
 # ============================================================================
-TK_VERSION="0.1.0"
+TK_VERSION="0.1.1"
 TK_SCHEMA_VERSION="0.1"
 TK_TOTAL_STEPS=12
 
@@ -36,11 +36,6 @@ Options:
   --dry-run     Don't POST; print JSON to stdout, save to /tmp/.
   -v --version  Print version.
   -h --help     Print help.
-
-Env:
-  TK_DRY_RUN=1                 Same as --dry-run.
-  TK_WORKER_REPORT_URL=...     Override Worker report endpoint.
-  TK_N8N_DIRECT_URL=...        Override n8n direct (Tier 1).
 HELP
       exit 0
       ;;
@@ -129,6 +124,14 @@ json_num_or_null() {
   fi
 }
 
+# Pipefail-safe count: ensure single integer
+safe_count() {
+  local val="${1:-0}"
+  val=$(printf '%s' "$val" | head -1 | tr -d -c '0-9')
+  [[ -z "$val" ]] && val=0
+  printf '%s' "$val"
+}
+
 ERRORS_JSON=""
 add_error() {
   local entry
@@ -145,6 +148,19 @@ sudo_run() {
   if [[ "${SUDO_OK:-false}" == "true" ]]; then
     sudo -n "$@" 2>/dev/null || true
   fi
+}
+
+# Parse "X MB/s" or "(X bytes/sec)" or "X bytes/sec" out of dd output -> MB/s
+dd_mbps() {
+  local out="$1"
+  local v
+  v=$(printf '%s' "$out" | grep -oE '[0-9.]+ MB/s' | awk '{print $1}' | head -1)
+  if [[ -z "$v" ]]; then
+    local bps
+    bps=$(printf '%s' "$out" | grep -oE '[0-9]+ bytes/sec' | awk '{print $1}' | head -1)
+    [[ -n "$bps" ]] && v=$(awk -v b="$bps" 'BEGIN{printf "%.1f", b/1048576}')
+  fi
+  printf '%s' "$v"
 }
 
 # ============================================================================
@@ -193,6 +209,9 @@ HAVE_DMI=$(command -v dmidecode >/dev/null 2>&1 && echo true || echo false)
 HAVE_LSPCI=$(command -v lspci >/dev/null 2>&1 && echo true || echo false)
 HAVE_OPENSSL=$(command -v openssl >/dev/null 2>&1 && echo true || echo false)
 HAVE_CURL=$(command -v curl >/dev/null 2>&1 && echo true || echo false)
+HAVE_IP=$(command -v ip >/dev/null 2>&1 && echo true || echo false)
+HAVE_IFCONFIG=$(command -v ifconfig >/dev/null 2>&1 && echo true || echo false)
+HAVE_SYSCTL=$(command -v sysctl >/dev/null 2>&1 && echo true || echo false)
 
 log_step "Self-check"
 log_ok
@@ -227,7 +246,7 @@ JSON_OS=$(printf '{"kernel":%s,"name":%s,"version":%s,"pretty_name":%s,"arch":%s
 log_ok
 
 # ============================================================================
-# STEP 2: System info
+# STEP 2: System info (CPU, RAM, disks, board) -- Linux + Mac fallbacks
 # ============================================================================
 log_step "Reading hardware info"
 CPU_MODEL=""; CPU_LOG=""; CPU_PHYS=""; CPU_MHZ=""
@@ -235,6 +254,7 @@ RAW_LSCPU=""; RAW_MEMINFO=""; RAW_DMI_MEM=""; RAW_DMI_SYS=""
 RAM_TOTAL=""; RAM_AVAIL=""; RAM_TYPE=""; RAM_SPEED=""
 BOARD_MFR=""; BOARD_PRD=""; BOARD_SH=""; BIOS_VER=""; BIOS_DATE=""
 
+# CPU -- Linux first
 if command -v lscpu >/dev/null 2>&1; then
   RAW_LSCPU="$(lscpu 2>/dev/null || true)"
   CPU_MODEL=$(echo "$RAW_LSCPU" | awk -F: '/^Model name/{sub(/^ +/,"",$2); print $2; exit}')
@@ -246,7 +266,14 @@ if [[ -z "$CPU_MODEL" ]] && [[ -r /proc/cpuinfo ]]; then
   CPU_MODEL=$(awk -F: '/model name|Model/{sub(/^ +/,"",$2); print $2; exit}' /proc/cpuinfo)
   [[ -z "$CPU_LOG" ]] && CPU_LOG=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo '')
 fi
+# Mac fallback via sysctl
+if [[ -z "$CPU_MODEL" ]] && [[ "$HAVE_SYSCTL" == "true" ]]; then
+  CPU_MODEL=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo '')
+  [[ -z "$CPU_LOG" ]]  && CPU_LOG=$(sysctl -n hw.logicalcpu 2>/dev/null || echo '')
+  [[ -z "$CPU_PHYS" ]] && CPU_PHYS=$(sysctl -n hw.physicalcpu 2>/dev/null || echo '')
+fi
 
+# RAM -- Linux meminfo first
 RAW_MEMINFO="$(read_file_safe /proc/meminfo)"
 if [[ -n "$RAW_MEMINFO" ]]; then
   KB=$(echo "$RAW_MEMINFO" | awk '/^MemTotal:/{print $2}')
@@ -254,7 +281,12 @@ if [[ -n "$RAW_MEMINFO" ]]; then
   KB=$(echo "$RAW_MEMINFO" | awk '/^MemAvailable:/{print $2}')
   [[ -n "$KB" ]] && RAM_AVAIL=$((KB * 1024))
 fi
+# Mac fallback
+if [[ -z "$RAM_TOTAL" ]] && [[ "$HAVE_SYSCTL" == "true" ]]; then
+  RAM_TOTAL=$(sysctl -n hw.memsize 2>/dev/null || echo '')
+fi
 
+# RAM type/speed via dmidecode (Linux + sudo)
 if [[ "$SUDO_OK" == "true" ]] && [[ "$HAVE_DMI" == "true" ]]; then
   RAW_DMI_MEM="$(sudo_run dmidecode -t memory)"
   RAM_TYPE=$(echo "$RAW_DMI_MEM" | awk -F: '/^[[:space:]]*Type:/{sub(/^ +/,"",$2); if ($2 != "Unknown" && $2 != "") {print $2; exit}}')
@@ -272,17 +304,43 @@ if [[ "$SUDO_OK" == "true" ]] && [[ "$HAVE_DMI" == "true" ]]; then
     BIOS_DATE=$(sudo_run dmidecode -s bios-release-date)
   fi
 fi
+# Mac board info (best effort)
+if [[ -z "$BOARD_PRD" ]] && command -v system_profiler >/dev/null 2>&1; then
+  SP_HW=$(system_profiler SPHardwareDataType 2>/dev/null || true)
+  BOARD_MFR=$(echo "$SP_HW" | awk -F: '/Model Identifier/{sub(/^ +/,"",$2); print $2; exit}')
+  BOARD_PRD="$BOARD_MFR"
+  BOARD_SER_RAW=$(echo "$SP_HW" | awk -F: '/Serial Number/{sub(/^ +/,"",$2); print $2; exit}')
+  if [[ -n "$BOARD_SER_RAW" ]]; then
+    BOARD_SH="sha256:$(printf '%s' "$BOARD_SER_RAW" | sha256)"
+  fi
+fi
 
+# Disks -- Linux
 DISKS_JSON="[]"
 if command -v lsblk >/dev/null 2>&1 && [[ "$HAVE_JQ" == "true" ]]; then
   DISKS_JSON=$(lsblk -d -b -o NAME,SIZE,MODEL,TRAN,SERIAL --json 2>/dev/null \
     | jq '[.blockdevices[] | select(.tran != null and .tran != "") | {name:.name, size_bytes:(.size|tonumber? // 0), model:(.model//""), tran:(.tran//"")}]' 2>/dev/null || echo '[]')
   [[ -z "$DISKS_JSON" ]] && DISKS_JSON="[]"
 fi
+# Disks -- Mac fallback (root disk only, basic)
+if [[ "$DISKS_JSON" == "[]" ]] && command -v df >/dev/null 2>&1 && command -v diskutil >/dev/null 2>&1; then
+  ROOT_DEV=$(df / 2>/dev/null | awk 'NR==2{print $1}')
+  ROOT_SIZE=$(df -k / 2>/dev/null | awk 'NR==2{print $2 * 1024}')
+  if [[ -n "$ROOT_DEV" && -n "$ROOT_SIZE" ]]; then
+    DISKS_JSON=$(printf '[{"name":%s,"size_bytes":%s,"model":"","tran":"unknown"}]' \
+      "$(json_string "$ROOT_DEV")" "$ROOT_SIZE")
+  fi
+fi
 
+# Filesystem usage on /
 FS_TOT=""; FS_FREE=""; FS_PCT=""
 if command -v df >/dev/null 2>&1; then
-  DFLINE=$(df -B1 / 2>/dev/null | awk 'NR==2{print $2,$4,$5}')
+  if df -B1 / >/dev/null 2>&1; then
+    DFLINE=$(df -B1 / 2>/dev/null | awk 'NR==2{print $2,$4,$5}')
+  else
+    # Mac df -k
+    DFLINE=$(df -k / 2>/dev/null | awk 'NR==2{print $2*1024,$4*1024,$5}')
+  fi
   FS_TOT=$(echo "$DFLINE" | awk '{print $1}')
   FS_FREE=$(echo "$DFLINE" | awk '{print $2}')
   FS_PCT=$(echo "$DFLINE" | awk '{gsub(/%/,"",$3); print $3}')
@@ -360,30 +418,54 @@ log_ok
 # ============================================================================
 log_step "Reading freshness signals"
 UPTIME_SEC=""
+BOOT_EPOCH=""
 [[ -r /proc/uptime ]] && UPTIME_SEC=$(awk '{print int($1)}' /proc/uptime)
+if [[ -z "$UPTIME_SEC" ]] && [[ "$HAVE_SYSCTL" == "true" ]]; then
+  BOOT_EPOCH=$(sysctl -n kern.boottime 2>/dev/null | grep -oE 'sec = [0-9]+' | awk '{print $3}')
+  [[ -n "$BOOT_EPOCH" ]] && UPTIME_SEC=$(( $(date +%s) - BOOT_EPOCH ))
+fi
+
 BOOT_TIME=""
-command -v who >/dev/null 2>&1 && BOOT_TIME=$(who -b 2>/dev/null | awk '{print $3" "$4}')
+if command -v uptime >/dev/null 2>&1; then
+  BOOT_TIME=$(uptime -s 2>/dev/null || true)
+fi
+if [[ -z "$BOOT_TIME" ]] && [[ -n "$BOOT_EPOCH" ]]; then
+  BOOT_TIME=$(date -u -r "$BOOT_EPOCH" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo '')
+fi
+if [[ -z "$BOOT_TIME" ]] && command -v who >/dev/null 2>&1; then
+  BOOT_TIME=$(who -b 2>/dev/null | awk '{$1=""; sub(/^ +/,""); print}' | head -1)
+fi
+
 OS_INSTALL=""
 if [[ -e /etc/hostname ]] && command -v stat >/dev/null 2>&1; then
   OS_INSTALL=$(stat -c %w /etc/hostname 2>/dev/null | head -1)
   [[ "$OS_INSTALL" == "-" ]] && OS_INSTALL=""
 fi
+
 PKG_COUNT=""
 if command -v dpkg >/dev/null 2>&1; then
-  PKG_COUNT=$(dpkg -l 2>/dev/null | grep -c '^ii' || echo '')
+  PKG_COUNT=$(dpkg -l 2>/dev/null | grep -c '^ii' 2>/dev/null)
+  PKG_COUNT=$(safe_count "$PKG_COUNT")
 elif command -v rpm >/dev/null 2>&1; then
-  PKG_COUNT=$(rpm -qa 2>/dev/null | wc -l)
+  PKG_COUNT=$(rpm -qa 2>/dev/null | wc -l 2>/dev/null)
+  PKG_COUNT=$(safe_count "$PKG_COUNT")
 fi
+
 JOURNAL_LINES_24H=""
 if command -v journalctl >/dev/null 2>&1; then
-  JOURNAL_LINES_24H=$(sudo_run journalctl --since "24 hours ago" --no-pager 2>/dev/null | wc -l || echo '')
+  JOURNAL_LINES_24H=$(sudo_run journalctl --since "24 hours ago" --no-pager 2>/dev/null | wc -l 2>/dev/null)
+  JOURNAL_LINES_24H=$(safe_count "$JOURNAL_LINES_24H")
 fi
+
 LAST_LOGIN_7D=""
 if command -v last >/dev/null 2>&1; then
-  LAST_LOGIN_7D=$(last -s -7days 2>/dev/null | grep -cE '^[a-zA-Z]' || echo '')
+  LAST_LOGIN_7D=$(last -s -7days 2>/dev/null | grep -cE '^[a-zA-Z]' 2>/dev/null)
+  LAST_LOGIN_7D=$(safe_count "$LAST_LOGIN_7D")
 fi
+
 RAW_WHO_B="$(who -b 2>/dev/null || true)"
 RAW_LAST_HEAD="$(last 2>/dev/null | head -20 || true)"
+
 JSON_FRESHNESS=$(printf '{"uptime_sec":%s,"boot_time":%s,"os_install_time":%s,"installed_packages_count":%s,"journal_lines_24h":%s,"last_login_count_7d":%s,"raw_who_b":%s,"raw_last_head":%s}' \
   "$(json_num_or_null "$UPTIME_SEC")" \
   "$(json_string_or_null "$BOOT_TIME")" \
@@ -477,7 +559,7 @@ JSON_GPU=$(printf '{"detected":%s,"devices":%s,"stack":%s,"topology":%s,"raw_nvi
 log_ok
 
 # ============================================================================
-# STEP 6: dmesg history scan
+# STEP 6: dmesg history scan -- pipefail-safe counting
 # ============================================================================
 log_step "Scanning dmesg history"
 RAW_DMESG_ERR=""
@@ -490,11 +572,12 @@ PAT_NAMES=("MCE" "machine_check" "PCIe_error" "GPU_fallen_off" "NVRM_xid" "ECC_e
 PAT_REGEX=("MCE|mce" "machine[_ ]check" "PCIe.*error|AER.*error" "fallen off the bus" "NVRM:.*Xid|NVRM:.*error" "ecc.*error|ECC.*error" "thermal.*throttl|HW Slowdown")
 HITS=""
 for i in "${!PAT_NAMES[@]}"; do
-  COUNT=$(echo "$RAW_DMESG_ERR" | grep -ciE "${PAT_REGEX[$i]}" || echo 0)
-  SAMPLE=$(echo "$RAW_DMESG_ERR" | grep -iE "${PAT_REGEX[$i]}" | head -1)
+  RAW_COUNT=$(printf '%s\n' "$RAW_DMESG_ERR" | grep -c -iE "${PAT_REGEX[$i]}" 2>/dev/null)
+  COUNT=$(safe_count "$RAW_COUNT")
+  SAMPLE=$(printf '%s\n' "$RAW_DMESG_ERR" | grep -iE "${PAT_REGEX[$i]}" 2>/dev/null | head -1)
   HIT=$(printf '{"pattern":%s,"count":%s,"sample":%s}' \
     "$(json_string "${PAT_NAMES[$i]}")" \
-    "$(json_num_or_null "$COUNT")" \
+    "$COUNT" \
     "$(json_string_or_null "$SAMPLE")")
   HITS="${HITS:+${HITS},}${HIT}"
 done
@@ -514,10 +597,17 @@ log_step "Running sustained AI smoke (60s)"
   BENCH_FILE="${TK_REPORT_DIR}/tk_bench_$$"
   BENCH_SIZE_MB=512
   BENCH_START=$(date +%s)
-  DD_OUT_W=$(dd if=/dev/zero of="$BENCH_FILE" bs=1M count=$BENCH_SIZE_MB oflag=direct 2>&1 | tail -1)
-  WRITE_MBPS=$(echo "$DD_OUT_W" | grep -oE '[0-9.]+ MB/s' | awk '{print $1}' | head -1)
-  DD_OUT_R=$(dd if="$BENCH_FILE" of=/dev/null bs=1M iflag=direct 2>&1 | tail -1)
-  READ_MBPS=$(echo "$DD_OUT_R" | grep -oE '[0-9.]+ MB/s' | awk '{print $1}' | head -1)
+  # Linux dd uses oflag=direct; Mac BSD dd does not support oflag, but accepts simpler flags
+  if dd if=/dev/zero of="$BENCH_FILE" bs=1m count=$BENCH_SIZE_MB 2>/dev/null >/dev/null; then
+    rm -f "$BENCH_FILE"
+    DD_OUT_W=$(dd if=/dev/zero of="$BENCH_FILE" bs=1m count=$BENCH_SIZE_MB 2>&1 | tail -1)
+    DD_OUT_R=$(dd if="$BENCH_FILE" of=/dev/null bs=1m 2>&1 | tail -1)
+  else
+    DD_OUT_W=$(dd if=/dev/zero of="$BENCH_FILE" bs=1M count=$BENCH_SIZE_MB oflag=direct 2>&1 | tail -1)
+    DD_OUT_R=$(dd if="$BENCH_FILE" of=/dev/null bs=1M iflag=direct 2>&1 | tail -1)
+  fi
+  WRITE_MBPS=$(dd_mbps "$DD_OUT_W")
+  READ_MBPS=$(dd_mbps "$DD_OUT_R")
   BENCH_DUR=$(( $(date +%s) - BENCH_START ))
   rm -f "$BENCH_FILE" 2>/dev/null
 
@@ -526,8 +616,8 @@ log_step "Running sustained AI smoke (60s)"
   [[ -n "$READ_MBPS" ]] && RMB_J="$READ_MBPS"
   printf '{"device_path":"%s","test_size_mb":%d,"write_mbps":%s,"read_mbps":%s,"duration_sec":%d,"raw_dd_write":%s,"raw_dd_read":%s}' \
     "$TK_REPORT_DIR" "$BENCH_SIZE_MB" "$WMB_J" "$RMB_J" "$BENCH_DUR" \
-    "$(printf '%s' "$DD_OUT_W" | sed 's/"/\\"/g; s/^/"/; s/$/"/')" \
-    "$(printf '%s' "$DD_OUT_R" | sed 's/"/\\"/g; s/^/"/; s/$/"/')" \
+    "$(printf '%s' "$DD_OUT_W" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/')" \
+    "$(printf '%s' "$DD_OUT_R" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/')" \
     > "${TK_REPORT_DIR}/tk_bench_result_$$"
 ) &
 BENCH_PID=$!
@@ -542,7 +632,7 @@ BENCH_PID=$!
 ) &
 THERMAL1_PID=$!
 
-# AI smoke
+# AI smoke -- clean try-chain: torch_cuda -> numpy -> error
 SMOKE_START=$(date +%s)
 SMOKE_BACKEND="skipped"
 SMOKE_PEAK_GFLOPS=""
@@ -554,66 +644,84 @@ if [[ "$HAVE_PY" == "true" ]]; then
   SMOKE_RAW=$(python3 - <<'PYAI' 2>&1
 import json, time
 result = {"backend": "skipped", "tests": [], "peak_gflops": None, "peak_memory_used_bytes": None, "error": None}
-try:
+
+def run_pytorch():
     import torch
-    if torch.cuda.is_available():
-        result["backend"] = "pytorch_cuda"
-        torch.cuda.empty_cache()
-        device = torch.device("cuda")
-        peak_g = 0.0; peak_m = 0
-        deadline = time.time() + 55
-        # Round 1: 4096 fp16
-        size = 4096
-        a = torch.randn((size, size), dtype=torch.float16, device=device)
-        b = torch.randn((size, size), dtype=torch.float16, device=device)
-        torch.cuda.synchronize()
-        t0 = time.time(); n = 0
-        while time.time() < deadline - 30 and n < 50:
-            c = a @ b
-            torch.cuda.synchronize()
-            n += 1
-        elapsed = time.time() - t0
-        if n > 0 and elapsed > 0:
-            gflops = (2 * size**3 * n) / elapsed / 1e9
-            peak_g = max(peak_g, gflops)
-            result["tests"].append({"name": f"matmul_fp16_{size}", "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
-        peak_m = max(peak_m, torch.cuda.memory_allocated())
-        del a, b, c; torch.cuda.empty_cache()
-        # Round 2: 8192 fp16 sustained
-        size = 8192
-        a = torch.randn((size, size), dtype=torch.float16, device=device)
-        b = torch.randn((size, size), dtype=torch.float16, device=device)
-        torch.cuda.synchronize()
-        t0 = time.time(); n = 0
-        while time.time() < deadline:
-            c = a @ b
-            torch.cuda.synchronize()
-            n += 1
-        elapsed = time.time() - t0
-        if n > 0 and elapsed > 0:
-            gflops = (2 * size**3 * n) / elapsed / 1e9
-            peak_g = max(peak_g, gflops)
-            result["tests"].append({"name": f"matmul_fp16_{size}", "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
-        peak_m = max(peak_m, torch.cuda.memory_allocated())
-        result["peak_gflops"] = round(peak_g, 1)
-        result["peak_memory_used_bytes"] = peak_m
-    else:
-        import numpy as np
-        result["backend"] = "numpy_cpu"
-        size = 2048
-        deadline = time.time() + 30
-        a = np.random.rand(size, size).astype("float32")
-        b = np.random.rand(size, size).astype("float32")
-        t0 = time.time(); n = 0
-        while time.time() < deadline:
-            c = a @ b; n += 1
-        elapsed = time.time() - t0
-        if n > 0 and elapsed > 0:
-            gflops = (2 * size**3 * n) / elapsed / 1e9
-            result["peak_gflops"] = round(gflops, 1)
-            result["tests"].append({"name": f"matmul_fp32_{size}_cpu", "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
+    if not torch.cuda.is_available():
+        return None
+    torch.cuda.empty_cache()
+    device = torch.device("cuda")
+    peak_g = 0.0; peak_m = 0
+    deadline = time.time() + 55
+    tests = []
+    size = 4096
+    a = torch.randn((size, size), dtype=torch.float16, device=device)
+    b = torch.randn((size, size), dtype=torch.float16, device=device)
+    torch.cuda.synchronize()
+    t0 = time.time(); n = 0
+    while time.time() < deadline - 30 and n < 50:
+        c = a @ b; torch.cuda.synchronize(); n += 1
+    elapsed = time.time() - t0
+    if n > 0 and elapsed > 0:
+        gflops = (2 * size**3 * n) / elapsed / 1e9
+        peak_g = max(peak_g, gflops)
+        tests.append({"name": "matmul_fp16_%d" % size, "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
+    peak_m = max(peak_m, torch.cuda.memory_allocated())
+    del a, b, c; torch.cuda.empty_cache()
+    size = 8192
+    a = torch.randn((size, size), dtype=torch.float16, device=device)
+    b = torch.randn((size, size), dtype=torch.float16, device=device)
+    torch.cuda.synchronize()
+    t0 = time.time(); n = 0
+    while time.time() < deadline:
+        c = a @ b; torch.cuda.synchronize(); n += 1
+    elapsed = time.time() - t0
+    if n > 0 and elapsed > 0:
+        gflops = (2 * size**3 * n) / elapsed / 1e9
+        peak_g = max(peak_g, gflops)
+        tests.append({"name": "matmul_fp16_%d" % size, "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
+    peak_m = max(peak_m, torch.cuda.memory_allocated())
+    return {"backend": "pytorch_cuda", "tests": tests, "peak_gflops": round(peak_g, 1), "peak_memory_used_bytes": peak_m}
+
+def run_numpy():
+    import numpy as np
+    size = 2048
+    deadline = time.time() + 30
+    a = np.random.rand(size, size).astype("float32")
+    b = np.random.rand(size, size).astype("float32")
+    t0 = time.time(); n = 0
+    while time.time() < deadline:
+        c = a @ b; n += 1
+    elapsed = time.time() - t0
+    gflops = 0.0; tests = []
+    if n > 0 and elapsed > 0:
+        gflops = (2 * size**3 * n) / elapsed / 1e9
+        tests.append({"name": "matmul_fp32_%d_cpu" % size, "iterations": n, "duration_sec": round(elapsed, 3), "gflops": round(gflops, 1), "ok": True})
+    return {"backend": "numpy_cpu", "tests": tests, "peak_gflops": round(gflops, 1), "peak_memory_used_bytes": None}
+
+out = None
+try:
+    out = run_pytorch()
+except ImportError:
+    pass
 except Exception as e:
-    result["error"] = str(e); result["backend"] = "error"
+    result["error"] = "pytorch: " + str(e)[:200]
+
+if out is None:
+    try:
+        out = run_numpy()
+    except ImportError:
+        result["backend"] = "no_libs"
+        if not result["error"]:
+            result["error"] = "neither torch nor numpy is available"
+    except Exception as e:
+        result["backend"] = "numpy_error"
+        if not result["error"]:
+            result["error"] = "numpy: " + str(e)[:200]
+
+if out:
+    result.update(out)
+
 print(json.dumps(result))
 PYAI
 )
@@ -627,7 +735,6 @@ PYAI
 fi
 SMOKE_DURATION=$(( $(date +%s) - SMOKE_START ))
 
-# Wait for background workers
 wait "$THERMAL1_PID" 2>/dev/null || true
 [[ -r "${TK_REPORT_DIR}/tk_thermal1_$$" ]] && THERMAL_SNAPSHOT_1=$(cat "${TK_REPORT_DIR}/tk_thermal1_$$")
 rm -f "${TK_REPORT_DIR}/tk_thermal1_$$" 2>/dev/null
@@ -700,16 +807,16 @@ JSON_SMART=$(printf '{"available":%s,"devices":%s}' \
 log_ok
 
 # ============================================================================
-# STEP 10: Network
+# STEP 10: Network -- Linux ip + Mac ifconfig fallback
 # ============================================================================
 log_step "Checking network"
 IFS_JSON="[]"
 FIRST_MAC=""
-if command -v ip >/dev/null 2>&1; then
-  IFS_LIST=""
+IFS_LIST=""
+
+if [[ "$HAVE_IP" == "true" ]]; then
   while IFS= read -r IFACE; do
-    [[ -z "$IFACE" ]] && continue
-    [[ "$IFACE" == "lo" ]] && continue
+    [[ -z "$IFACE" || "$IFACE" == "lo" ]] && continue
     MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null || echo "")
     [[ -z "$MAC" ]] && continue
     [[ -z "$FIRST_MAC" ]] && FIRST_MAC="$MAC"
@@ -730,8 +837,34 @@ if command -v ip >/dev/null 2>&1; then
       "$(json_string_or_null "$IPV4")")
     IFS_LIST="${IFS_LIST:+${IFS_LIST},}${OBJ}"
   done < <(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//')
-  IFS_JSON="[${IFS_LIST}]"
+elif [[ "$HAVE_IFCONFIG" == "true" ]]; then
+  # Mac/BSD fallback
+  IF_LIST_RAW=$(ifconfig -l 2>/dev/null || ifconfig 2>/dev/null | awk '/^[a-z]/{print $1}' | sed 's/://')
+  for IFACE in $IF_LIST_RAW; do
+    [[ "$IFACE" == "lo0" || "$IFACE" == "lo" ]] && continue
+    DETAILS=$(ifconfig "$IFACE" 2>/dev/null || true)
+    [[ -z "$DETAILS" ]] && continue
+    MAC=$(echo "$DETAILS" | awk '/ether/{print $2; exit}')
+    [[ -z "$MAC" ]] && continue
+    [[ -z "$FIRST_MAC" ]] && FIRST_MAC="$MAC"
+    MAC_HASH="sha256:$(printf '%s' "$MAC" | sha256)"
+    IPV4=$(echo "$DETAILS" | awk '/inet /{print $2; exit}')
+    STATUS=$(echo "$DETAILS" | awk '/status:/{print $2; exit}')
+    CARRIER="false"
+    [[ "$STATUS" == "active" ]] && CARRIER="true"
+    TYPE="ethernet"
+    [[ "$IFACE" =~ ^en ]] && TYPE="ethernet"
+    [[ "$IFACE" =~ ^(wl|wlan|wlp) ]] && TYPE="wireless"
+    OBJ=$(printf '{"name":%s,"type":%s,"speed_mbps":null,"duplex":null,"carrier":%s,"mac_hash":%s,"ipv4":%s}' \
+      "$(json_string "$IFACE")" \
+      "$(json_string "$TYPE")" \
+      "$CARRIER" \
+      "$(json_string "$MAC_HASH")" \
+      "$(json_string_or_null "$IPV4")")
+    IFS_LIST="${IFS_LIST:+${IFS_LIST},}${OBJ}"
+  done
 fi
+IFS_JSON="[${IFS_LIST}]"
 
 PUBLIC_IP=""
 INTERNET_UP="false"
