@@ -17,3 +17,11 @@ secrets/
 tmp/
 *.log
 report-*.json
+
+# Tooling artifacts (OpenWolf / claude-flow vb. — public repoda yok)
+.claude-flow/
+.claude/
+.wolf/
+.firecrawl/
+.playwright-mcp/
+.mcp.json
