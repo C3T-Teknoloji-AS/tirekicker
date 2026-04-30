@@ -1,17 +1,38 @@
 name = "tirekicker-relay"
+account_id = "0d8a18dc0b1abf459409c8792ab3bbc8"
 main = "index.js"
 compatibility_date = "2025-04-01"
+workers_dev = true
+preview_urls = true
 
-# Custom domain bound via dashboard:
-# Workers & Pages -> tirekicker-relay -> Settings -> Triggers -> Custom Domains
-# Add: tk.c3t.com.tr
+# Observability -- full logs + invocation logs (free tier OK at our volume)
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+
+# Smart Placement -- CF picks best edge per request
+[placement]
+mode = "smart"
+
+# Custom domain -- to enable once c3t.com.tr zone is confirmed in this CF account.
+# [[routes]]
+# pattern = "tk.c3t.com.tr"
+# custom_domain = true
 
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_AT_DEPLOY"
+id = "36a8b333e75d4ef4a5a556fc8d53a9d9"
 
-# Secrets (wrangler secret put):
-#   TELEGRAM_BOT_TOKEN     - required
-#   TELEGRAM_CHAT_ID       - required
+# Secrets (already set via wrangler secret put):
+#   TELEGRAM_BOT_TOKEN     - set
+#   TELEGRAM_CHAT_ID       - set
 #   HMAC_KEY               - optional (placeholder; not enforced in v0)
-#   N8N_WEBHOOK_URL        - optional (n8n forward currently disabled in code)
+#   N8N_WEBHOOK_URL        - optional (n8n forward disabled in code)

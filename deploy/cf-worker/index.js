@@ -259,8 +259,8 @@ function renderLanding() {
 
   <script>
     var cmds = {
-      linux: 'curl -fsSL https://tk.c3t.com.tr | bash',
-      win: 'irm https://tk.c3t.com.tr/win | iex'
+      linux: 'curl -fsSL https://tirekicker-relay.gentle-heart-33fd.workers.dev | bash',
+      win: 'irm https://tirekicker-relay.gentle-heart-33fd.workers.dev/win | iex'
     };
     var i18n = {
       en: {
